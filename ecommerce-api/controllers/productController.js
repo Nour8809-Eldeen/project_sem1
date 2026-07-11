@@ -8,12 +8,33 @@ exports.getProducts = asyncHandler(async (req, res) => {
 
   const query = {};
 
-  if (category) query.category = category;
+  if (category) {
+    if (!mongoose.Types.ObjectId.isValid(category)) {
+      res.status(400);
+      throw new Error('Invalid category id');
+    }
+    query.category = category;
+  }
+
   if (search) query.name = { $regex: search, $options: 'i' };
   if (minPrice || maxPrice) {
     query.price = {};
-    if (minPrice) query.price.$gte = Number(minPrice);
-    if (maxPrice) query.price.$lte = Number(maxPrice);
+    if (minPrice) {
+      const parsedMinPrice = Number(minPrice);
+      if (!Number.isFinite(parsedMinPrice) || parsedMinPrice < 0) {
+        res.status(400);
+        throw new Error('minPrice must be a non-negative number');
+      }
+      query.price.$gte = parsedMinPrice;
+    }
+    if (maxPrice) {
+      const parsedMaxPrice = Number(maxPrice);
+      if (!Number.isFinite(parsedMaxPrice) || parsedMaxPrice < 0) {
+        res.status(400);
+        throw new Error('maxPrice must be a non-negative number');
+      }
+      query.price.$lte = parsedMaxPrice;
+    }
   }
 
   let sortOption = { createdAt: -1 };
@@ -23,27 +44,29 @@ exports.getProducts = asyncHandler(async (req, res) => {
     sortOption = { [sortField]: sortDirection };
   }
 
-  const pageNumber = Number(page);
-  const limitNumber = Number(limit);
-  const skip = (pageNumber - 1) * limitNumber;
+  const parsedPage = Number(page);
+  const parsedLimit = Number(limit);
+  const safePage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 10;
+  const skip = (safePage - 1) * safeLimit;
 
   const [products, total] = await Promise.all([
     Product.find(query)
       .populate('category', 'name description')
       .sort(sortOption)
       .skip(skip)
-      .limit(limitNumber),
+      .limit(safeLimit),
     Product.countDocuments(query),
   ]);
 
-  res.json({
+  return res.json({
     success: true,
     message: 'Products fetched successfully',
     data: products,
     pagination: {
       total,
-      page: pageNumber,
-      pages: Math.ceil(total / limitNumber),
+      page: safePage,
+      pages: Math.max(1, Math.ceil(total / safeLimit)),
       count: products.length,
     },
   });
@@ -62,7 +85,7 @@ exports.getProductById = asyncHandler(async (req, res) => {
     throw new Error('Product not found');
   }
 
-  res.json({ success: true, message: 'Product fetched successfully', data: product });
+  return res.json({ success: true, message: 'Product fetched successfully', data: product });
 });
 
 exports.createProduct = asyncHandler(async (req, res) => {
@@ -85,7 +108,7 @@ exports.createProduct = asyncHandler(async (req, res) => {
   }
 
   const product = await Product.create({ name, description, price, category, stock, image: image || '' });
-  res.status(201).json({ success: true, message: 'Product created successfully', data: product });
+  return res.status(201).json({ success: true, message: 'Product created successfully', data: product });
 });
 
 exports.updateProduct = asyncHandler(async (req, res) => {
@@ -124,7 +147,7 @@ exports.updateProduct = asyncHandler(async (req, res) => {
   if (image !== undefined) product.image = image;
 
   const updatedProduct = await product.save();
-  res.json({ success: true, message: 'Product updated successfully', data: updatedProduct });
+  return res.json({ success: true, message: 'Product updated successfully', data: updatedProduct });
 });
 
 exports.deleteProduct = asyncHandler(async (req, res) => {
@@ -140,5 +163,5 @@ exports.deleteProduct = asyncHandler(async (req, res) => {
   }
 
   await product.deleteOne();
-  res.json({ success: true, message: 'Product deleted successfully', data: null });
+  return res.json({ success: true, message: 'Product deleted successfully', data: null });
 });

@@ -100,6 +100,12 @@ exports.updateCartItem = asyncHandler(async (req, res) => {
 
 exports.removeCartItem = asyncHandler(async (req, res) => {
   const { userId, productId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    res.status(400);
+    throw new Error('Invalid product id');
+  }
+
   const cart = await Cart.findOne({ userId });
 
   if (!cart) {
