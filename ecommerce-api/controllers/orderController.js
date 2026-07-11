@@ -17,6 +17,7 @@ exports.createOrder = asyncHandler(async (req, res) => {
     throw new Error('Cart is empty');
   }
 
+  const stockChecks = [];
   for (const item of cart.items) {
     const product = await Product.findById(item.product._id);
     if (!product) {
@@ -28,6 +29,8 @@ exports.createOrder = asyncHandler(async (req, res) => {
       res.status(400);
       throw new Error(`Insufficient stock for ${product.name}`);
     }
+
+    stockChecks.push({ productId: product._id, quantity: item.quantity });
   }
 
   const orderItems = cart.items.map((item) => ({
@@ -37,9 +40,9 @@ exports.createOrder = asyncHandler(async (req, res) => {
     price: item.price,
   }));
 
-  for (const item of cart.items) {
-    await Product.findByIdAndUpdate(item.product._id, {
-      $inc: { stock: -item.quantity },
+  for (const stockItem of stockChecks) {
+    await Product.findByIdAndUpdate(stockItem.productId, {
+      $inc: { stock: -stockItem.quantity },
     });
   }
 
@@ -54,13 +57,13 @@ exports.createOrder = asyncHandler(async (req, res) => {
   cart.totalPrice = 0;
   await cart.save();
 
-  res.status(201).json({ success: true, message: 'Order created successfully', data: order });
+  return res.status(201).json({ success: true, message: 'Order created successfully', data: order });
 });
 
 exports.getUserOrders = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const orders = await Order.find({ userId }).sort({ createdAt: -1 });
-  res.json({ success: true, message: 'Orders fetched successfully', data: orders });
+  return res.json({ success: true, message: 'Orders fetched successfully', data: orders });
 });
 
 exports.getOrderById = asyncHandler(async (req, res) => {
@@ -70,7 +73,7 @@ exports.getOrderById = asyncHandler(async (req, res) => {
     throw new Error('Order not found');
   }
 
-  res.json({ success: true, message: 'Order fetched successfully', data: order });
+  return res.json({ success: true, message: 'Order fetched successfully', data: order });
 });
 
 exports.updateOrderStatus = asyncHandler(async (req, res) => {
@@ -90,7 +93,7 @@ exports.updateOrderStatus = asyncHandler(async (req, res) => {
 
   order.status = status;
   await order.save();
-  res.json({ success: true, message: 'Order status updated successfully', data: order });
+  return res.json({ success: true, message: 'Order status updated successfully', data: order });
 });
 
 exports.cancelOrder = asyncHandler(async (req, res) => {
@@ -112,5 +115,5 @@ exports.cancelOrder = asyncHandler(async (req, res) => {
     await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
   }
 
-  res.json({ success: true, message: 'Order cancelled successfully', data: order });
+  return res.json({ success: true, message: 'Order cancelled successfully', data: order });
 });

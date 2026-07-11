@@ -4,7 +4,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const mongoose = require('mongoose');
 
 const recalculateCart = (cart) => {
-  cart.totalPrice = cart.items.reduce((sum, item) => sum + item.quantity * item.price, 0);
+  cart.totalPrice = cart.items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.price), 0);
 };
 
 exports.addToCart = asyncHandler(async (req, res) => {
@@ -20,7 +20,8 @@ exports.addToCart = asyncHandler(async (req, res) => {
     throw new Error('Invalid product id');
   }
 
-  if (quantity < 1) {
+  const parsedQuantity = Number(quantity);
+  if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1) {
     res.status(400);
     throw new Error('Quantity must be at least 1');
   }
@@ -38,17 +39,17 @@ exports.addToCart = asyncHandler(async (req, res) => {
 
   const existingItem = cart.items.find((item) => item.product.toString() === productId);
   if (existingItem) {
-    existingItem.quantity += quantity;
+    existingItem.quantity += parsedQuantity;
     existingItem.price = product.price;
   } else {
-    cart.items.push({ product: product._id, quantity, price: product.price });
+    cart.items.push({ product: product._id, quantity: parsedQuantity, price: product.price });
   }
 
   recalculateCart(cart);
   await cart.save();
 
   const populatedCart = await Cart.findById(cart._id).populate('items.product', 'name price');
-  res.status(201).json({ success: true, message: 'Item added to cart', data: populatedCart });
+  return res.status(201).json({ success: true, message: 'Item added to cart', data: populatedCart });
 });
 
 exports.getCart = asyncHandler(async (req, res) => {
@@ -59,14 +60,20 @@ exports.getCart = asyncHandler(async (req, res) => {
     return res.json({ success: true, message: 'Cart is empty', data: { userId, items: [], totalPrice: 0 } });
   }
 
-  res.json({ success: true, message: 'Cart fetched successfully', data: cart });
+  return res.json({ success: true, message: 'Cart fetched successfully', data: cart });
 });
 
 exports.updateCartItem = asyncHandler(async (req, res) => {
   const { userId, productId } = req.params;
   const { quantity } = req.body;
 
-  if (quantity < 1) {
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    res.status(400);
+    throw new Error('Invalid product id');
+  }
+
+  const parsedQuantity = Number(quantity);
+  if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1) {
     res.status(400);
     throw new Error('Quantity must be at least 1');
   }
@@ -83,12 +90,12 @@ exports.updateCartItem = asyncHandler(async (req, res) => {
     throw new Error('Item not found in cart');
   }
 
-  item.quantity = quantity;
+  item.quantity = parsedQuantity;
   recalculateCart(cart);
   await cart.save();
 
   const populatedCart = await Cart.findById(cart._id).populate('items.product', 'name price');
-  res.json({ success: true, message: 'Cart updated successfully', data: populatedCart });
+  return res.json({ success: true, message: 'Cart updated successfully', data: populatedCart });
 });
 
 exports.removeCartItem = asyncHandler(async (req, res) => {
@@ -105,7 +112,7 @@ exports.removeCartItem = asyncHandler(async (req, res) => {
   await cart.save();
 
   const populatedCart = await Cart.findById(cart._id).populate('items.product', 'name price');
-  res.json({ success: true, message: 'Item removed from cart', data: populatedCart });
+  return res.json({ success: true, message: 'Item removed from cart', data: populatedCart });
 });
 
 exports.clearCart = asyncHandler(async (req, res) => {
@@ -121,5 +128,5 @@ exports.clearCart = asyncHandler(async (req, res) => {
   cart.totalPrice = 0;
   await cart.save();
 
-  res.json({ success: true, message: 'Cart cleared successfully', data: cart });
+  return res.json({ success: true, message: 'Cart cleared successfully', data: cart });
 });
